@@ -1,0 +1,250 @@
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// ===== OLED DEFINES =====
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_MOSI   23
+#define OLED_CLK    18
+#define OLED_RESET  22
+#define OLED_DC     21
+#define OLED_CS     19
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &SPI,
+                         OLED_DC, OLED_RESET, OLED_CS);
+
+// ===== BLE (ESP32) =====
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+// Nordic UART-style UUIDs (you can change these to match your app)
+static BLEUUID SERVICE_UUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+static BLEUUID CHARACTERISTIC_UUID_RX("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
+static BLEUUID CHARACTERISTIC_UUID_TX("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
+
+BLEServer* pServer = nullptr;
+BLECharacteristic* pTxCharacteristic = nullptr;
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
+
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) override {
+    deviceConnected = true;
+  }
+  void onDisconnect(BLEServer* pServer) override {
+    deviceConnected = false;
+    // Restart advertising so the app can reconnect if needed
+    pServer->getAdvertising()->start();
+  }
+};
+
+// ===== INTRO STATE MACHINE =====
+enum IntroState {
+  INTRO_LOGO,
+  INTRO_BLE_WAIT,
+  INTRO_BLE_SUCCESS,
+  INTRO_DONE
+};
+
+IntroState introState = INTRO_LOGO;
+
+// Timers
+unsigned long stateStartMillis = 0;
+
+// Animation timing for "Waiting for bluetooth"
+unsigned long lastUpdate = 0;
+const unsigned long frameInterval = 300; // ms between frames
+int frame = 0; // 0..5 number of dots
+
+// ====== DRAW HELPERS ======
+
+void drawIntroLogo() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // Big "Aqua / Spec"
+  display.setTextSize(2);
+  display.setCursor(10, 0);  // a little left padding
+  display.println("");
+  display.println("Aqua");
+  display.println(" Spec");
+
+  // Small "by Rotala" with blank lines
+  display.setTextSize(1);
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println(" by Rotala");
+
+  display.display();
+}
+
+void drawBleWaiting(int frameDots) {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // Big title, same style
+  display.setTextSize(2);
+  display.setCursor(10, 0);
+  display.println("");
+  display.println("Aqua");
+  display.println(" Spec");
+
+  // Small text
+  display.setTextSize(1);
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+
+  display.println("  Waiting ");
+  display.println("    for ");
+  display.print(" bluetooth");
+
+  // animated dots on same line
+  for (int i = 0; i < frameDots; i++) {
+    display.print(". ");
+  }
+
+  display.display();
+}
+
+void drawBleSuccess() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // Big "Aqua / Spec"
+  display.setTextSize(2);
+  display.setCursor(10, 0);  // a little left padding
+  display.println("");
+  display.println("Aqua");
+  display.println(" Spec");
+
+  // Small success text
+  display.setTextSize(1);
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println(" Bluetooth");
+  display.println(" Connected");
+
+  display.display();
+}
+
+// ===== BLE INIT =====
+void initBLE() {
+  BLEDevice::init("AquaSpec");  // device name that shows in scans
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService* pService = pServer->createService(SERVICE_UUID);
+
+  // TX (notify to app)
+  pTxCharacteristic = pService->createCharacteristic(
+                         CHARACTERISTIC_UUID_TX,
+                         BLECharacteristic::PROPERTY_NOTIFY
+                       );
+  pTxCharacteristic->addDescriptor(new BLE2902());
+
+  // RX (write from app)
+  BLECharacteristic* pRxCharacteristic = pService->createCharacteristic(
+                                           CHARACTERISTIC_UUID_RX,
+                                           BLECharacteristic::PROPERTY_WRITE
+                                         );
+
+  pService->start();
+
+  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);  // some recommended defaults
+  pAdvertising->setMinPreferred(0x12);
+  pAdvertising->start();
+
+  Serial.println("BLE advertising as AquaSpec...");
+}
+
+// ===== SETUP =====
+void setup() {
+  Serial.begin(115200);
+
+  // OLED init
+  SPI.begin(OLED_CLK, -1, OLED_MOSI, OLED_CS);
+  if (!display.begin(SSD1306_SWITCHCAPVCC)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;) {}
+  }
+  display.setRotation(3);
+
+  // Show Screen 1 immediately
+  drawIntroLogo();
+  introState = INTRO_LOGO;
+  stateStartMillis = millis();
+
+  // Start BLE so it's ready when we hit screen 2
+  initBLE();
+}
+
+// ===== LOOP =====
+void loop() {
+  unsigned long now = millis();
+
+  switch (introState) {
+
+    case INTRO_LOGO:
+      // Stay on "Aquaspec by Rotala" for 2 seconds
+      if (now - stateStartMillis >= 2000) {
+        introState = INTRO_BLE_WAIT;
+        stateStartMillis = now;
+        frame = 0;
+        lastUpdate = now;
+        drawBleWaiting(frame);
+      }
+      break;
+
+    case INTRO_BLE_WAIT:
+      // Animate "Waiting for bluetooth" while advertising BLE
+      if (now - lastUpdate >= frameInterval) {
+        lastUpdate = now;
+        frame = (frame + 1) % 6;  // 0..5
+        drawBleWaiting(frame);
+      }
+
+      // If BLE connects, go to success screen
+      if (deviceConnected && !oldDeviceConnected) {
+        oldDeviceConnected = deviceConnected;
+        introState = INTRO_BLE_SUCCESS;
+        stateStartMillis = now;
+        drawBleSuccess();
+      }
+      break;
+
+    case INTRO_BLE_SUCCESS:
+      // Show success screen for 3 seconds
+      if (now - stateStartMillis >= 5000) {
+        introState = INTRO_DONE;
+        // For now, just leave the success screen up.
+        // Later we can transition into the tank list or main UI here.
+      }
+      break;
+
+    case INTRO_DONE:
+      // Do nothing for now – stays on Bluetooth Connected screen
+      break;
+  }
+
+  // Track disconnects (in case you care later)
+  if (!deviceConnected && oldDeviceConnected) {
+    oldDeviceConnected = deviceConnected;
+    // Optionally: jump back to INTRO_BLE_WAIT here if you want
+    // introState = INTRO_BLE_WAIT;
+    // stateStartMillis = millis();
+  }
+}
