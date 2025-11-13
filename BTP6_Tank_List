@@ -1,0 +1,299 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// ---------- Buttons ----------
+#define UP_BUTTON     25
+#define DOWN_BUTTON   26
+#define SELECT_BUTTON 27
+#define BACK_BUTTON   14
+
+// ---------- OLED (SPI wiring) ----------
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_MOSI   23
+#define OLED_CLK    18
+#define OLED_RESET  22
+#define OLED_DC     21
+#define OLED_CS     19
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &SPI,
+                         OLED_DC, OLED_RESET, OLED_CS);
+
+// ---------- WiFi ----------
+const char* WIFI_SSID     = "iPhone";
+const char* WIFI_PASSWORD = "Banana16";
+
+// ---------- Supabase ----------
+const char* SUPABASE_URL   = "https://dbfglovgjuzqiejekflg.supabase.co";
+const char* SUPABASE_TABLE = "/rest/v1/tanks";
+
+// ⚠ service role key (dev only, do NOT ship this)
+const char* SUPABASE_SERVICE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRiZmdsb3ZnanV6cWllamVrZmxnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0Mzg4MjY3NCwiZXhwIjoyMDU5NDU4Njc0fQ.y-0vKthVyX1K2nR1HwdmiysjuWhTkHVuSTlBOnI-fjI";
+
+// ---------- User ----------
+const char* USER_ID = "31171a0d-9008-400e-b9c1-f8469846f9b1";
+
+// ---------- Tank storage ----------
+const int MAX_TANKS = 20;
+String tankNames[MAX_TANKS];
+int tankCount = 0;
+
+// ---------- Layout ----------
+const int HEADER_HEIGHT = 12;
+
+// We’ll show up to 5 rows.
+// Screen height 64 - header 12 = 52 px.
+// 5 rows → ~10 px per row (8px text + a bit of gap).
+const int VISIBLE_ROWS = 5;
+const int ROW_HEIGHT   = 10;  // line + tiny gap
+
+int scrollOffset  = 0;  // first tank index currently visible
+int selectedIndex = 0;  // which tank the ">" is on
+
+// ---------- Debounce ----------
+uint32_t lastDebounce = 0;
+const uint32_t DEBOUNCE_MS = 200;
+
+// ---------- Forward declarations ----------
+bool fetchTanks();
+void parseTankNames(const String& payload);
+void renderTankList();
+void drawHeader();
+void drawScrollbar();
+void drawTankRow(int index, int y, bool selected);
+
+// ===================== SETUP =====================
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(UP_BUTTON, INPUT_PULLUP);
+  pinMode(DOWN_BUTTON, INPUT_PULLUP);
+  pinMode(SELECT_BUTTON, INPUT_PULLUP);
+  pinMode(BACK_BUTTON, INPUT_PULLUP);
+
+  SPI.begin(OLED_CLK, -1, OLED_MOSI, OLED_CS);
+  if (!display.begin(SSD1306_SWITCHCAPVCC)) {
+    Serial.println("SSD1306 allocation failed");
+    while (1);
+  }
+  display.setRotation(3);
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Connecting WiFi...");
+  display.display();
+
+  // WiFi
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("WiFi connected");
+  display.println("Fetching tanks...");
+  display.display();
+
+  // Fetch tanks
+  if (fetchTanks()) {
+    scrollOffset  = 0;
+    selectedIndex = 0;
+    renderTankList();
+  } else {
+    display.clearDisplay();
+    drawHeader();
+    display.setCursor(2, HEADER_HEIGHT + 4);
+    display.println("Error fetching tanks");
+    display.display();
+  }
+}
+
+// ====================== LOOP ======================
+void loop() {
+  uint32_t now = millis();
+
+  if (now - lastDebounce > DEBOUNCE_MS) {
+    bool upState   = digitalRead(UP_BUTTON);
+    bool downState = digitalRead(DOWN_BUTTON);
+
+    // UP
+    if (upState == LOW && tankCount > 0) {
+      if (selectedIndex > 0) {
+        selectedIndex--;
+        if (selectedIndex < scrollOffset) {
+          scrollOffset = selectedIndex;
+        }
+        renderTankList();
+      }
+      lastDebounce = now;
+    }
+
+    // DOWN
+    if (downState == LOW && tankCount > 0) {
+      if (selectedIndex < tankCount - 1) {
+        selectedIndex++;
+        int bottomVisible = scrollOffset + VISIBLE_ROWS - 1;
+        if (selectedIndex > bottomVisible) {
+          scrollOffset = selectedIndex - (VISIBLE_ROWS - 1);
+        }
+        renderTankList();
+      }
+      lastDebounce = now;
+    }
+  }
+
+  // SELECT/BACK behavior can be added later when we move to tank detail
+}
+
+// =================== SUPABASE =====================
+bool fetchTanks() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient https;
+
+  String url = String(SUPABASE_URL) + SUPABASE_TABLE +
+               "?user_id=eq." + USER_ID +
+               "&select=name";
+
+  Serial.println("GET " + url);
+
+  if (!https.begin(client, url)) {
+    Serial.println("HTTPS begin failed");
+    return false;
+  }
+
+  https.addHeader("apikey", SUPABASE_SERVICE_KEY);
+  https.addHeader("Authorization", String("Bearer ") + SUPABASE_SERVICE_KEY);
+
+  int code = https.GET();
+  Serial.print("HTTP status: ");
+  Serial.println(code);
+  if (code != 200) {
+    https.end();
+    return false;
+  }
+
+  String payload = https.getString();
+  https.end();
+  Serial.println("Payload:");
+  Serial.println(payload);
+
+  parseTankNames(payload);
+  return tankCount > 0;
+}
+
+void parseTankNames(const String& payload) {
+  tankCount = 0;
+  int idx = 0;
+  while (tankCount < MAX_TANKS) {
+    int pos = payload.indexOf("\"name\":\"", idx);
+    if (pos == -1) break;
+    pos += 8;
+    int end = payload.indexOf("\"", pos);
+    if (end == -1) break;
+    tankNames[tankCount++] = payload.substring(pos, end);
+    idx = end + 1;
+  }
+  Serial.print("Found tanks: ");
+  Serial.println(tankCount);
+}
+
+// =================== DRAWING ======================
+
+void drawHeader() {
+  // Inverted "Tanks" title bar
+  display.fillRect(0, 0, SCREEN_WIDTH, HEADER_HEIGHT, SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
+  display.setCursor(2, 2);
+  display.print("Tanks");
+  display.setTextColor(SSD1306_WHITE, SSD1306_BLACK);
+}
+
+void drawScrollbar() {
+  if (tankCount <= VISIBLE_ROWS) return;
+
+  int trackX = SCREEN_WIDTH - 4;
+  int trackY = HEADER_HEIGHT;
+  int trackH = SCREEN_HEIGHT - HEADER_HEIGHT;
+
+  display.drawRect(trackX, trackY, 4, trackH - 1, SSD1306_WHITE);
+
+  float ratioVisible = (float)VISIBLE_ROWS / (float)tankCount;
+  int sliderH = (int)(trackH * ratioVisible);
+  if (sliderH < 4) sliderH = 4;
+
+  float ratioOffset = 0.0;
+  int maxOffset = tankCount - VISIBLE_ROWS;
+  if (maxOffset > 0) {
+    ratioOffset = (float)scrollOffset / (float)maxOffset;
+  }
+
+  int sliderY = trackY + (int)((trackH - sliderH) * ratioOffset);
+  display.fillRect(trackX + 1, sliderY, 2, sliderH, SSD1306_WHITE);
+}
+
+void drawTankRow(int index, int y, bool selected) {
+  if (index < 0 || index >= tankCount) return;
+
+  String name = tankNames[index];
+
+  // For 128px wide, text size 1 → about 21 chars fit.
+  const int MAX_CHARS = 21;
+  if (name.length() > MAX_CHARS) {
+    name = name.substring(0, MAX_CHARS - 3) + "...";
+  }
+
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE, SSD1306_BLACK);
+
+  // Selector arrow
+  display.setCursor(0, y);
+  display.print(selected ? ">" : " ");
+
+  // Tank name
+  display.setCursor(10, y);
+  display.print(name);
+}
+
+void renderTankList() {
+  display.clearDisplay();
+
+  drawHeader();
+
+  int startY = HEADER_HEIGHT + 2;
+
+  int rowsToShow = VISIBLE_ROWS;
+  if (tankCount - scrollOffset < VISIBLE_ROWS) {
+    rowsToShow = tankCount - scrollOffset;
+  }
+
+  for (int i = 0; i < rowsToShow; i++) {
+    int idx = scrollOffset + i;
+    int y = startY + i * ROW_HEIGHT;
+    bool isSelected = (idx == selectedIndex);
+    drawTankRow(idx, y, isSelected);
+  }
+
+  drawScrollbar();
+
+  display.display();
+}
