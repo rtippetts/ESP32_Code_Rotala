@@ -1,0 +1,1083 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <math.h>
+
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+// ---------------- BUTTONS ----------------
+#define UP_BUTTON     25
+#define DOWN_BUTTON   26
+#define SELECT_BUTTON 27
+#define BACK_BUTTON   14
+
+// ---------------- OLED ----------------
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_MOSI   23
+#define OLED_CLK    18
+#define OLED_RESET  22
+#define OLED_DC     21
+#define OLED_CS     19
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &SPI,
+                         OLED_DC, OLED_RESET, OLED_CS);
+
+// After display.setRotation(3):
+//   display.width()  = 64
+//   display.height() = 128
+
+// One completely blank 64-pixel row for the bitmap
+#define BLANK_ROW 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+
+// ===== R LOGO BITMAP (64 x 128) =====
+const unsigned char PROGMEM MY_BITMAP[] = {
+
+  // ---------- Rows 1–35: blank ----------
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+
+  // ---------- Rows 36–47 ----------
+  0x00, 0x1F, 0xFF, 0xFF, 0xFF, 0xC0, 0x00, 0x00,   // 36
+  0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xF8, 0x00, 0x00,   // 37
+  0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00,   // 38
+  0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x00,   // 39
+  0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xFF, 0xC0, 0x00,   // 40
+  0x00, 0x1F, 0xFF, 0xFF, 0xFF, 0xFF, 0xE0, 0x00,   // 41
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xF0, 0x00,   // 42
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xF0, 0x00,   // 43
+  0x00, 0x03, 0xFC, 0x00, 0xFF, 0xFF, 0xF8, 0x00,   // 44
+  0x00, 0x03, 0xE0, 0x00, 0x1F, 0xFF, 0xF8, 0x00,   // 45
+  0x00, 0x03, 0x00, 0x00, 0x07, 0xFF, 0xFC, 0x00,   // 46
+  0x00, 0x02, 0x00, 0x00, 0x01, 0xFF, 0xFC, 0x00,   // 47
+
+  // ---------- Rows 48–57 ----------
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x7F, 0xFC, 0x00,   // 48
+  0x00, 0x00, 0x00, 0x00, 0xE0, 0x1F, 0xFE, 0x00,   // 49
+  0x00, 0x00, 0x00, 0x00, 0xE0, 0x0F, 0xFE, 0x00,   // 50
+  0x00, 0x00, 0x00, 0x00, 0xE0, 0x0F, 0xFE, 0x00,   // 51
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x1F, 0xFC, 0x00,   // 52
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0xFC, 0x00,   // 53
+  0x00, 0x02, 0x00, 0x00, 0x00, 0xFF, 0xFC, 0x00,   // 54
+  0x00, 0x03, 0x00, 0x00, 0x03, 0xFF, 0xFC, 0x00,   // 55
+  0x00, 0x03, 0xE0, 0x00, 0x0F, 0xFF, 0xF8, 0x00,   // 56
+  0x00, 0x03, 0xFC, 0x00, 0x7F, 0xFF, 0xF8, 0x00,   // 57
+
+  // ---------- Rows 58–67 ----------
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xF0, 0x00,   // 58
+  0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xF0, 0x00,   // 59
+  0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xE0, 0x00,   // 60
+  0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xE0, 0x00,   // 61
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xC0, 0x00,   // 62
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x00,   // 63
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00,   // 64
+  0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xFC, 0x00, 0x00,   // 65
+  0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xF8, 0x00, 0x00,   // 66
+  0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xFC, 0x00, 0x00,   // 67
+
+  // ---------- Rows 68–77 ----------
+  0x00, 0x03, 0xFF, 0xE0, 0xFF, 0xFE, 0x00, 0x00,   // 68
+  0x00, 0x03, 0xFF, 0xE0, 0x7F, 0xFF, 0x00, 0x00,   // 69
+  0x00, 0x03, 0xFF, 0xE0, 0x3F, 0xFF, 0x00, 0x00,   // 70
+  0x00, 0x00, 0x3F, 0xE0, 0x1F, 0xFF, 0x80, 0x00,   // 71
+  0x00, 0x00, 0x3F, 0xE0, 0x0F, 0xFF, 0xC0, 0x00,   // 72
+  0x00, 0x00, 0x3F, 0xE0, 0x0F, 0xFF, 0xC0, 0x00,   // 73
+  0x00, 0x03, 0xFF, 0xE0, 0x07, 0xFF, 0xE0, 0x00,   // 74
+  0x00, 0x03, 0xFF, 0xE0, 0x03, 0xFF, 0xF0, 0x00,   // 75
+  0x00, 0x03, 0xFF, 0xE0, 0x03, 0xFF, 0xF0, 0x00,   // 76
+  0x00, 0x03, 0xFF, 0xE0, 0x01, 0xFF, 0xF8, 0x00,   // 77
+
+  // ---------- Rows 78–81 ----------
+  0x00, 0x03, 0xFF, 0xE0, 0x00, 0xFF, 0xFC, 0x00,   // 78
+  0x00, 0x01, 0xFF, 0xC0, 0x00, 0xFF, 0xFC, 0x00,   // 79
+  0x00, 0x00, 0xFF, 0x80, 0x00, 0x7F, 0xFE, 0x00,   // 80
+  0x00, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0xFF, 0x00,   // 81
+
+  // ---------- Rows 82–128: blank ----------
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW
+};
+
+// ======================================================
+// ========== WIFI & SUPABASE (NO HARDCODED CREDS) ======
+// ======================================================
+
+// These get filled from BLE PROVISION:ssid|pass|userId|duid|url|key
+String WIFI_SSID     = "";
+String WIFI_PASSWORD = "";
+String USER_ID       = "";
+bool   wifiCredsReceived = false;
+
+// Fixed Supabase info
+const char* SUPABASE_URL         = "https://dbfglovgjuzqiejekflg.supabase.co";
+const char* SUPABASE_TANKS_PATH  = "/rest/v1/tanks";
+const char* SUPABASE_SENSOR_PATH = "/rest/v1/sensor_readings";
+const char* SUPABASE_SERVICE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRiZmdsb3ZnanV6cWllamVrZmxnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0Mzg4MjY3NCwiZXhwIjoyMDU5NDU4Njc0fQ.y-0vKthVyX1K2nR1HwdmiysjuWhTkHVuSTlBOnI-fjI";
+
+// ======================================================
+// ========== TANK LIST UI ===============================
+// ======================================================
+const int MAX_TANKS = 20;
+String tankNames[MAX_TANKS];
+String tankIds[MAX_TANKS];
+int tankCount = 0;
+
+const int HEADER_HEIGHT = 12;
+const int LINE_HEIGHT   = 8;
+const int ITEM_GAP      = 4;
+
+int scrollOffset    = 0;
+int selectedIndex   = 0;
+int lastVisibleIndex= 0;
+int visibleCount    = 0;
+
+uint32_t lastDebounce    = 0;
+const uint32_t DEBOUNCE_MS = 200;
+bool lastSelectState     = HIGH;
+
+// ---------------- SENSORS ----------------
+#define ONE_WIRE_BUS 4
+#define TDS_PIN      33
+#define PH_PIN       32
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
+// ---------------- READING STRUCT ----------------
+struct Reading {
+  float tempC;
+  float tempF;
+  float ph;
+  int   tds;
+};
+
+enum UiState { STATE_LIST, STATE_TANK_MENU };
+UiState uiState = STATE_LIST;
+int tankMenuSelection = 0;
+
+// ================================================================
+// ======================== BLE SECTION ===========================
+// ================================================================
+static BLEUUID SERVICE_UUID          ("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+static BLEUUID CHARACTERISTIC_UUID_RX("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
+static BLEUUID CHARACTERISTIC_UUID_TX("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
+
+BLEServer*        pServer      = nullptr;
+BLECharacteristic* rxChar      = nullptr;
+BLECharacteristic* txChar      = nullptr;
+
+bool bleConnected               = false;
+bool bleStopped                 = false;
+bool bleDisconnectedAfterCreds  = false;
+
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) override {
+    bleConnected = true;
+  }
+  void onDisconnect(BLEServer* pServer) override {
+    bleConnected = false;
+    if (wifiCredsReceived) {
+      bleDisconnectedAfterCreds = true;
+    }
+  }
+};
+
+class MyRxCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) override {
+    String raw = pCharacteristic->getValue();
+    if (raw.isEmpty()) return;
+
+    Serial.print("BLE RX: ");
+    Serial.println(raw);
+
+    if (!raw.startsWith("PROVISION:")) return;
+
+    raw.remove(0, 10); // strip "PROVISION:"
+
+    // Expect: ssid|pass|userId|duid|supabaseUrl|supabaseKey
+    String parts[6];
+    int pCount = 0;
+    int start  = 0;
+
+    while (pCount < 6) {
+      int sep = raw.indexOf('|', start);
+      if (sep == -1) {
+        parts[pCount++] = raw.substring(start);
+        break;
+      }
+      parts[pCount++] = raw.substring(start, sep);
+      start = sep + 1;
+    }
+
+    if (pCount >= 1) WIFI_SSID     = parts[0];
+    if (pCount >= 2) WIFI_PASSWORD = parts[1];
+    if (pCount >= 3) USER_ID       = parts[2];
+
+    Serial.println("Parsed fields:");
+    Serial.print("SSID: ");    Serial.println(WIFI_SSID);
+    Serial.print("PASS len: ");Serial.println(WIFI_PASSWORD.length());
+    Serial.print("USER_ID: "); Serial.println(USER_ID);
+
+    wifiCredsReceived = true;
+  }
+};
+
+void initBLE() {
+  BLEDevice::init("AquaSpec");
+
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService* pService = pServer->createService(SERVICE_UUID);
+
+  rxChar = pService->createCharacteristic(
+              CHARACTERISTIC_UUID_RX,
+              BLECharacteristic::PROPERTY_WRITE
+           );
+  rxChar->setCallbacks(new MyRxCallbacks());
+
+  txChar = pService->createCharacteristic(
+              CHARACTERISTIC_UUID_TX,
+              BLECharacteristic::PROPERTY_NOTIFY
+           );
+  txChar->addDescriptor(new BLE2902());
+
+  pService->start();
+  BLEAdvertising* adv = BLEDevice::getAdvertising();
+  adv->addServiceUUID(SERVICE_UUID);
+  adv->setScanResponse(true);
+  adv->setMinPreferred(0x06);
+  adv->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+
+  Serial.println("BLE advertising as AquaSpec...");
+}
+
+// ================================================================
+// ====================== INTRO SCREENS ===========================
+// ================================================================
+void renderIntroScreenNoDisplay() {
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(2);
+  display.setCursor(10, 0);
+  display.println("");
+  display.println("Aqua");
+  display.println(" Spec");
+
+  display.setTextSize(1);
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println(" by Rotala");
+}
+
+void renderBootLogo() {
+  display.clearDisplay();
+  display.drawBitmap(0, 0, MY_BITMAP, 64, 128, SSD1306_WHITE);
+  display.display();
+}
+
+void runBootLogoSequence() {
+  int w = display.width();   // 64
+  int h = display.height();  // 128
+
+  // 1) Show R logo
+  renderBootLogo();
+  delay(3000);
+
+  // 2) Wipe to white
+  for (int x = w; x >= 0; x -= 2) {
+    display.clearDisplay();
+    display.drawBitmap(0, 0, MY_BITMAP, 64, 128, SSD1306_WHITE);
+    display.fillRect(x, 0, w - x, h, SSD1306_WHITE);
+    display.display();
+    delay(15);
+  }
+
+  // 3) Reveal AquaSpec intro
+  for (int x = w; x >= 0; x -= 2) {
+    display.clearDisplay();
+    renderIntroScreenNoDisplay();
+    display.fillRect(0, 0, x, h, SSD1306_WHITE);
+    display.display();
+    delay(15);
+  }
+
+  // 4) Final intro
+  display.clearDisplay();
+  renderIntroScreenNoDisplay();
+  display.display();
+}
+
+void drawBleWaitScreen(int dots) {
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(10,0);
+  display.println("");
+  display.println("Aqua");
+  display.println(" Spec");
+
+  display.setTextSize(1);
+  display.println("");
+  display.println("");
+  display.println(" Waiting for");
+  display.print(" bluetooth");
+  for (int i=0; i<dots; i++) display.print(".");
+  display.display();
+}
+
+void drawBleConnectedScreen() {
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(10,0);
+  display.println("");
+  display.println("Aqua");
+  display.println(" Spec");
+
+  display.setTextSize(1);
+  display.println("");
+  display.println("");
+  display.println(" Bluetooth");
+  display.println(" Connected");
+  display.display();
+}
+
+void drawBleDisconnectHint() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+  display.println("Creds received.");
+  display.println("Please close the");
+  display.println("Bluetooth connection");
+  display.println("in the app.");
+  display.display();
+}
+
+// ================================================================
+// ====================== UTILITY TEMPLATES =======================
+// ================================================================
+template<typename T>
+T medianOf(T* arr, int n){
+  for(int i=1;i<n;i++){
+    T key = arr[i];
+    int j = i-1;
+    while(j>=0 && arr[j] > key){
+      arr[j+1] = arr[j];
+      j--;
+    }
+    arr[j+1] = key;
+  }
+  return (n%2) ? arr[n/2] : (arr[n/2-1] + arr[n/2]) / 2.0;
+}
+
+// ================================================================
+// ============================ SETUP ==============================
+// ================================================================
+bool fetchTanks();
+void parseTankNamesAndIds(const String& payload);
+void renderTankList();
+void drawHeader();
+void drawScrollbar();
+int  drawTankRow(int index,int y,bool selected,int maxCharsPerLine);
+void ensureSelectedVisible();
+void wrapTankNameToLines(const String& name,String* outLines,int& lineCount,int maxCharsPerLine);
+Reading takeReading();
+float readTempC();
+int   readTDS(float tempC);
+float readPH();
+bool  sendToSupabase(const Reading& r,int tankIndex);
+int   drawTankTitleHeaderBlock(int tankIndex);
+void  drawTankMenuScreen(int tankIndex,int menuSel);
+void  drawMeasuringScreen(int tankIndex,int progress);
+void  drawMeasurementResultsScreen(int tankIndex,const Reading& r);
+void  drawSendingScreen(int tankIndex);
+void  drawUploadResultScreen(int tankIndex,bool ok);
+void  performMeasurementAndUpload(int tankIndex);
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(UP_BUTTON,    INPUT_PULLUP);
+  pinMode(DOWN_BUTTON,  INPUT_PULLUP);
+  pinMode(SELECT_BUTTON,INPUT_PULLUP);
+  pinMode(BACK_BUTTON,  INPUT_PULLUP);
+
+  SPI.begin(OLED_CLK, -1, OLED_MOSI, OLED_CS);
+  if (!display.begin(SSD1306_SWITCHCAPVCC)) {
+    Serial.println("SSD1306 allocation failed");
+    while(1);
+  }
+  display.setRotation(3);   // portrait
+
+  sensors.begin();
+  analogReadResolution(12);
+  analogSetAttenuation(ADC_11db);
+
+  // Boot logo & AquaSpec intro
+  runBootLogoSequence();
+
+  // Init BLE and start advertising
+  initBLE();
+
+  // ====== BLE WAIT FLOW ======
+  uint32_t lastDots = millis();
+  int dots = 0;
+
+  // 1) Wait for BLE connection
+  while (!bleConnected) {
+    if (millis() - lastDots > 350) {
+      dots = (dots + 1) % 4;
+      drawBleWaitScreen(dots);
+      lastDots = millis();
+    }
+  }
+
+  // 2) Show connected screen briefly
+  drawBleConnectedScreen();
+  delay(1200);
+
+  // 3) Wait for credentials to arrive
+  while (!wifiCredsReceived) {
+    delay(100);
+  }
+
+  // 4) Ask user to disconnect BLE, then wait for disconnect
+  drawBleDisconnectHint();
+  while (!bleDisconnectedAfterCreds) {
+    delay(100);
+  }
+
+  // 5) Fully stop BLE before WiFi
+  BLEDevice::deinit(true);
+  bleStopped = true;
+
+  // ====== WIFI CONNECT ======
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println("Connecting WiFi...");
+  display.display();
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID.c_str(), WIFI_PASSWORD.c_str());
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+
+  display.clearDisplay();
+  display.println("WiFi connected");
+  display.println("Fetching tanks...");
+  display.display();
+
+  // Fetch tanks
+  if (fetchTanks()) {
+    scrollOffset  = 0;
+    selectedIndex = 0;
+    uiState       = STATE_LIST;
+    renderTankList();
+  } else {
+    display.clearDisplay();
+    drawHeader();
+    display.setCursor(2, HEADER_HEIGHT+4);
+    display.println("Error fetching tanks");
+    display.display();
+  }
+}
+
+// ================================================================
+// ============================== LOOP ============================
+// ================================================================
+void loop() {
+  uint32_t now = millis();
+
+  if (now - lastDebounce > DEBOUNCE_MS) {
+    bool upState     = digitalRead(UP_BUTTON);
+    bool downState   = digitalRead(DOWN_BUTTON);
+    bool selectState = digitalRead(SELECT_BUTTON);
+
+    if (uiState == STATE_LIST) {
+      if (upState == LOW && tankCount > 0) {
+        if (selectedIndex>0) {
+          selectedIndex--;
+          ensureSelectedVisible();
+          renderTankList();
+        }
+        lastDebounce = now;
+      }
+
+      if (downState == LOW && tankCount > 0) {
+        if (selectedIndex < tankCount-1) {
+          selectedIndex++;
+          ensureSelectedVisible();
+          renderTankList();
+        }
+        lastDebounce = now;
+      }
+
+      if (lastSelectState == HIGH && selectState == LOW && tankCount>0) {
+        uiState = STATE_TANK_MENU;
+        tankMenuSelection = 0;
+        drawTankMenuScreen(selectedIndex, tankMenuSelection);
+        lastDebounce = now;
+      }
+    }
+
+    else if (uiState == STATE_TANK_MENU) {
+      if (upState == LOW) {
+        tankMenuSelection = (tankMenuSelection==0) ? 1 : 0;
+        drawTankMenuScreen(selectedIndex, tankMenuSelection);
+        lastDebounce = now;
+      }
+
+      if (downState == LOW) {
+        tankMenuSelection = (tankMenuSelection==0) ? 1 : 0;
+        drawTankMenuScreen(selectedIndex, tankMenuSelection);
+        lastDebounce = now;
+      }
+
+      if (lastSelectState == HIGH && selectState==LOW) {
+        if (tankMenuSelection==0) {
+          performMeasurementAndUpload(selectedIndex);
+          uiState = STATE_LIST;
+          renderTankList();
+        } else {
+          uiState = STATE_LIST;
+          renderTankList();
+        }
+        lastDebounce = now;
+      }
+    }
+
+    lastSelectState = selectState;
+  }
+}
+
+// ================================================================
+// ==================== SUPABASE: GET TANKS =======================
+// ================================================================
+bool fetchTanks() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient https;
+
+  String url =
+    String(SUPABASE_URL) + SUPABASE_TANKS_PATH +
+    "?user_id=eq." + USER_ID +
+    "&select=id,name";
+
+  Serial.println("GET " + url);
+
+  if (!https.begin(client, url)) return false;
+
+  https.addHeader("apikey", SUPABASE_SERVICE_KEY);
+  https.addHeader("Authorization", String("Bearer ")+SUPABASE_SERVICE_KEY);
+
+  int code = https.GET();
+  if (code != 200) {
+    https.end();
+    return false;
+  }
+
+  String payload = https.getString();
+  https.end();
+
+  parseTankNamesAndIds(payload);
+  return tankCount > 0;
+}
+
+void parseTankNamesAndIds(const String& payload) {
+  tankCount = 0;
+  int idx = 0;
+
+  while (tankCount < MAX_TANKS) {
+    int idPos = payload.indexOf("\"id\":\"", idx);
+    if(idPos==-1) break;
+    idPos += 6;
+    int idEnd = payload.indexOf("\"", idPos);
+    if(idEnd==-1) break;
+    String id = payload.substring(idPos,idEnd);
+
+    int namePos = payload.indexOf("\"name\":\"", idEnd);
+    if(namePos==-1) break;
+    namePos += 8;
+    int nameEnd = payload.indexOf("\"", namePos);
+    if(nameEnd==-1) break;
+    String name = payload.substring(namePos, nameEnd);
+
+    tankIds[tankCount]   = id;
+    tankNames[tankCount] = name;
+    tankCount++;
+
+    idx = nameEnd+1;
+  }
+}
+
+// ================================================================
+// ================== SUPABASE: POST SENSOR =======================
+// ================================================================
+bool sendToSupabase(const Reading& r,int tankIndex) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  if (tankIndex<0 || tankIndex>=tankCount) return false;
+
+  String activeTankId = tankIds[tankIndex];
+  if (activeTankId.length()==0) return false;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient https;
+  String url = String(SUPABASE_URL) + SUPABASE_SENSOR_PATH;
+
+  String body = "{";
+  body += "\"tank_id\":\""+activeTankId+"\",";
+  body += "\"temperature\":"+String(r.tempF,1)+",";
+  body += "\"ph\":"+String(r.ph,2)+",";
+  body += "\"tds\":"+String(r.tds);
+  body += "}";
+
+  if (!https.begin(client, url)) return false;
+
+  https.addHeader("Content-Type","application/json");
+  https.addHeader("apikey",SUPABASE_SERVICE_KEY);
+  https.addHeader("Authorization",String("Bearer ")+SUPABASE_SERVICE_KEY);
+  https.addHeader("Prefer","return=minimal");
+
+  int code = https.POST(body);
+  https.end();
+
+  return (code==200 || code==201);
+}
+
+// ================================================================
+// ==================== RENDERING FUNCTIONS =======================
+// ================================================================
+void drawHeader() {
+  int W = display.width();
+  display.fillRect(0,0,W,HEADER_HEIGHT,SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_BLACK,SSD1306_WHITE);
+
+  const char* title = "TANKS";
+  int titleWidth = strlen(title)*6;
+  int x = (W-titleWidth)/2;
+  if(x<0) x=0;
+  display.setCursor(x,2);
+  display.print(title);
+
+  display.setTextColor(SSD1306_WHITE,SSD1306_BLACK);
+}
+
+void drawScrollbar() {
+  int H = display.height();
+  int W = display.width();
+
+  if(tankCount<=0 || visibleCount<=0) return;
+  if(visibleCount>=tankCount) return;
+
+  int trackX=W-4;
+  int trackY=HEADER_HEIGHT;
+  int trackH=H-HEADER_HEIGHT;
+
+  display.drawRect(trackX,trackY,4,trackH-1,SSD1306_WHITE);
+
+  float fracVisible = (float)visibleCount/tankCount;
+  if(fracVisible>1.0f) fracVisible=1.0f;
+
+  int sliderH = trackH*fracVisible;
+  if(sliderH<4) sliderH=4;
+  if(sliderH>trackH-2) sliderH=trackH-2;
+
+  int maxOffset = tankCount-visibleCount;
+  float fracPos = (maxOffset>0) ? (float)scrollOffset/maxOffset : 0;
+
+  int sliderY = trackY + (trackH-sliderH)*fracPos;
+
+  display.fillRect(trackX+1, sliderY, 2, sliderH, SSD1306_WHITE);
+}
+
+void renderTankList() {
+  display.clearDisplay();
+  drawHeader();
+
+  int H = display.height();
+  int W = display.width();
+
+  int startY = HEADER_HEIGHT + LINE_HEIGHT;
+
+  int textAreaWidth = W - 10 - 6;
+  int maxCharsPerLine = textAreaWidth/6;
+  if(maxCharsPerLine<3) maxCharsPerLine=3;
+
+  int y = startY;
+  visibleCount=0;
+  lastVisibleIndex=scrollOffset;
+
+  for(int i=scrollOffset;i<tankCount;i++){
+    const int MAX_LINES=8;
+    String tempLines[MAX_LINES];
+    int lineCount=0;
+    wrapTankNameToLines(tankNames[i],tempLines,lineCount,maxCharsPerLine);
+    if(lineCount<=0) lineCount=1;
+
+    int itemHeight = lineCount*LINE_HEIGHT + ITEM_GAP;
+    if(y+itemHeight > H) break;
+
+    drawTankRow(i,y,(i==selectedIndex),maxCharsPerLine);
+    y+=itemHeight;
+    visibleCount++;
+    lastVisibleIndex=i;
+  }
+
+  drawScrollbar();
+  display.display();
+}
+
+int drawTankRow(int index, int y, bool selected, int maxCharsPerLine){
+  const int MAX_LINES=8;
+  String lines[MAX_LINES];
+  int lineCount=0;
+
+  wrapTankNameToLines(tankNames[index],lines,lineCount,maxCharsPerLine);
+  if(lineCount<=0) lineCount=1;
+
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE,SSD1306_BLACK);
+
+  display.setCursor(0,y);
+  display.print(selected ? ">" : " ");
+
+  for(int i=0;i<lineCount;i++){
+    int textY = y + i*LINE_HEIGHT;
+    display.setCursor(10,textY);
+    display.print(lines[i]);
+  }
+
+  return lineCount;
+}
+
+void ensureSelectedVisible() {
+  int H = display.height();
+  int W = display.width();
+
+  int startY = HEADER_HEIGHT + LINE_HEIGHT;
+  int textAreaWidth=W-10-6;
+  int maxCharsPerLine=textAreaWidth/6;
+  if(maxCharsPerLine<3) maxCharsPerLine=3;
+
+  if(selectedIndex < scrollOffset){
+    scrollOffset=selectedIndex;
+    return;
+  }
+
+  while(true){
+    int y=startY;
+    bool selectedVisible=false;
+
+    for(int i=scrollOffset;i<tankCount;i++){
+      const int MAX_LINES=8;
+      String tempLines[MAX_LINES];
+      int lineCount=0;
+      wrapTankNameToLines(tankNames[i],tempLines,lineCount,maxCharsPerLine);
+      if(lineCount<=0) lineCount=1;
+
+      int itemHeight=lineCount*LINE_HEIGHT + ITEM_GAP;
+      if(y+itemHeight>H) break;
+
+      if(i==selectedIndex){ selectedVisible=true; break; }
+
+      y+=itemHeight;
+    }
+
+    if(selectedVisible) break;
+
+    if(scrollOffset >= selectedIndex){
+      scrollOffset=selectedIndex;
+      break;
+    }
+
+    scrollOffset++;
+  }
+}
+
+void wrapTankNameToLines(const String& name,String* outLines,int& lineCount,int maxCharsPerLine) {
+  lineCount=0;
+  if(name.length()==0) return;
+
+  const int MAX_WORD=7;
+  const int BREAK_KEEP=6;
+  const int MAX_LINES=8;
+
+  if(name.length()<=MAX_WORD && name.length()<=maxCharsPerLine){
+    outLines[0]=name;
+    lineCount=1;
+    return;
+  }
+
+  String currentLine="";
+  int currentLen=0;
+  int pos=0, n=name.length();
+
+  while(pos<n && lineCount<MAX_LINES){
+    while(pos<n && name[pos]==' ') pos++;
+    if(pos>=n) break;
+
+    int startWord=pos;
+    while(pos<n && name[pos]!=' ') pos++;
+    String word=name.substring(startWord,pos);
+
+    while(word.length()>0 && lineCount<MAX_LINES){
+      if(word.length()<=MAX_WORD && word.length()<=maxCharsPerLine){
+        int extra = (currentLen==0)?word.length():1+word.length();
+        if(currentLen+extra <= maxCharsPerLine){
+          if(currentLen==0) currentLine=word;
+          else currentLine+=" "+word;
+          currentLen+=extra;
+        } else {
+          outLines[lineCount++]=currentLine;
+          currentLine=word;
+          currentLen=word.length();
+        }
+        word="";
+      } else {
+        int maxChunk=maxCharsPerLine-1;
+        if(maxChunk<1) maxChunk=1;
+        int chunkLen=BREAK_KEEP;
+        if(chunkLen>maxChunk) chunkLen=maxChunk;
+        if(chunkLen>word.length()) chunkLen=word.length();
+
+        String chunk=word.substring(0,chunkLen);
+        bool more=(chunkLen<word.length());
+        String piece = more ? chunk+"-" : chunk;
+
+        int extra=(currentLen==0)?piece.length():1+piece.length();
+        if(currentLen+extra <= maxCharsPerLine){
+          if(currentLen==0) currentLine=piece;
+          else currentLine+=" "+piece;
+          currentLen+=extra;
+        } else {
+          outLines[lineCount++]=currentLine;
+          currentLine=piece;
+          currentLen=piece.length();
+        }
+
+        word = more ? word.substring(chunkLen) : "";
+      }
+    }
+  }
+
+  if(currentLen>0 && lineCount<MAX_LINES){
+    outLines[lineCount++]=currentLine;
+  }
+}
+
+// ================================================================
+// ===================== SENSOR / READINGS ========================
+// ================================================================
+float readTempC(){
+  sensors.requestTemperatures();
+  float t=sensors.getTempCByIndex(0);
+  if(t<-100.0f || t>85.0f) t=25.0f;
+  return t;
+}
+
+int readTDS(float tempC){
+  int raw=analogRead(TDS_PIN);
+  float v=raw*(3.3f/4095.f);
+  float k=1.0f+0.02f*(tempC-25.0f);
+  float cv=v/k;
+  float tds=(133.42*pow(cv,3)-255.86*pow(cv,2)+857.39*cv)*0.5;
+  tds = tds/880*706.5;
+  return (int)tds;
+}
+
+float readPH(){
+  int raw=analogRead(PH_PIN);
+  return -0.0214f*raw + 16.7711f;
+}
+
+Reading takeReading(){
+  const int N=15;
+  float tC[N], pHvals[N];
+  int TDSvals[N];
+
+  for(int i=0;i<N;i++){
+    tC[i]=readTempC();
+    delay(100);
+  }
+  float tempC=medianOf(tC,N);
+
+  for(int i=0;i<N;i++){
+    pHvals[i]=readPH();
+    TDSvals[i]=readTDS(tempC);
+    delay(100);
+  }
+
+  Reading r;
+  r.tempC=tempC;
+  r.tempF=tempC*9.0f/5.0f+32.0f;
+  r.ph=medianOf(pHvals,N);
+  r.tds=medianOf(TDSvals,N);
+  return r;
+}
+
+// ================================================================
+// ======================= TANK MEASURE UI ========================
+// ================================================================
+int drawTankTitleHeaderBlock(int tankIndex){
+  display.clearDisplay();
+  display.setTextSize(1);
+
+  int W=display.width();
+  int textAreaWidth=W-4;
+  int maxChars=textAreaWidth/6;
+  if(maxChars<3) maxChars=3;
+
+  const int MAX_LINES=8;
+  String lines[MAX_LINES];
+  int lineCount=0;
+  wrapTankNameToLines(tankNames[tankIndex],lines,lineCount,maxChars);
+  if(lineCount<=0) lineCount=1;
+
+  int headerH=lineCount*LINE_HEIGHT + 2;
+
+  display.fillRect(0,0,W,headerH,SSD1306_WHITE);
+  display.setTextColor(SSD1306_BLACK,SSD1306_WHITE);
+
+  int y=0;
+  for(int i=0;i<lineCount;i++){
+    String upper=lines[i]; upper.toUpperCase();
+    int px = upper.length()*6;
+    int x=(W-px)/2; if(x<0)x=0;
+    display.setCursor(x,y);
+    display.print(upper);
+    y+=LINE_HEIGHT;
+  }
+
+  display.setTextColor(SSD1306_WHITE,SSD1306_BLACK);
+  return headerH;
+}
+
+void drawTankMenuScreen(int tankIndex,int menuSel){
+  int headerH=drawTankTitleHeaderBlock(tankIndex);
+  int y=headerH + 2*LINE_HEIGHT;
+
+  display.setCursor(0,y);
+  display.print(menuSel==0?">":" ");
+  display.setCursor(10,y);
+  display.print("Measure");
+
+  y+=2*LINE_HEIGHT;
+
+  display.setCursor(0,y);
+  display.print(menuSel==1?">":" ");
+  display.setCursor(10,y);
+  display.print("Back");
+
+  display.display();
+}
+
+void drawMeasuringScreen(int tankIndex,int progress){
+  int headerH=drawTankTitleHeaderBlock(tankIndex);
+
+  display.setCursor(0, headerH + 2*LINE_HEIGHT);
+  display.print("Measuring");
+
+  int W=display.width();
+  int barMargin=10;
+  int barW=W-barMargin*2;
+  if(barW<10) barW=10;
+  int barH=6;
+  int barY = headerH + 4*LINE_HEIGHT;
+
+  display.drawRect(barMargin, barY, barW, barH, SSD1306_WHITE);
+
+  if(progress<0) progress=0;
+  if(progress>100) progress=100;
+  int fillW=(barW-2)*progress/100;
+  if(fillW>0){
+    display.fillRect(barMargin+1, barY+1, fillW, barH-2, SSD1306_WHITE);
+  }
+
+  display.display();
+}
+
+void drawMeasurementResultsScreen(int tankIndex,const Reading& r){
+  int headerH=drawTankTitleHeaderBlock(tankIndex);
+
+  int y = headerH + 2*LINE_HEIGHT;
+  display.setCursor(0,y); display.print("pH: ");   display.println(r.ph,2);
+
+  y+=LINE_HEIGHT;
+  display.setCursor(0,y); display.print("TDS: ");  display.println(r.tds);
+
+  y+=LINE_HEIGHT;
+  display.setCursor(0,y); display.print("Temp: "); display.print(r.tempF,1); display.println(" F");
+
+  display.display();
+}
+
+void drawSendingScreen(int tankIndex){
+  int headerH=drawTankTitleHeaderBlock(tankIndex);
+  int y = headerH + 2*LINE_HEIGHT;
+  display.setCursor(0,y); display.print("Sending...");
+  display.display();
+}
+
+void drawUploadResultScreen(int tankIndex,bool ok){
+  int headerH=drawTankTitleHeaderBlock(tankIndex);
+  int y = headerH + 2*LINE_HEIGHT;
+  display.setCursor(0,y); display.print(ok?"Upload OK":"Upload FAILED");
+  display.display();
+}
+
+void performMeasurementAndUpload(int tankIndex){
+  drawMeasuringScreen(tankIndex,0);
+
+  Reading r = takeReading();
+
+  for(int i=1;i<=10;i++){
+    drawMeasuringScreen(tankIndex, i*10);
+    delay(80);
+  }
+
+  drawMeasurementResultsScreen(tankIndex,r);
+  delay(5000);
+
+  drawSendingScreen(tankIndex);
+  bool ok = sendToSupabase(r,tankIndex);
+
+  drawUploadResultScreen(tankIndex,ok);
+  delay(1500);
+}
