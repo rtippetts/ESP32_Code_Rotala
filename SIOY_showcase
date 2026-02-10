@@ -1,0 +1,647 @@
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// ---------------- OLED ----------------
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_MOSI   23
+#define OLED_CLK    18
+#define OLED_RESET  22
+#define OLED_DC     21
+#define OLED_CS     19
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &SPI,
+                         OLED_DC, OLED_RESET, OLED_CS);
+
+// After display.setRotation(3):
+//   display.width()  = 64
+//   display.height() = 128
+
+// One completely blank 64-pixel row for the bitmap
+#define BLANK_ROW 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+
+// ===== R LOGO BITMAP (64 x 128) =====
+const unsigned char PROGMEM MY_BITMAP[] = {
+  // ---------- Rows 1–35: blank ----------
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+
+  // ---------- Rows 36–47 ----------
+  0x00, 0x1F, 0xFF, 0xFF, 0xFF, 0xC0, 0x00, 0x00,   // 36
+  0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xF8, 0x00, 0x00,   // 37
+  0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00,   // 38
+  0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x00,   // 39
+  0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xFF, 0xC0, 0x00,   // 40
+  0x00, 0x1F, 0xFF, 0xFF, 0xFF, 0xFF, 0xE0, 0x00,   // 41
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xF0, 0x00,   // 42
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xF0, 0x00,   // 43
+  0x00, 0x03, 0xFC, 0x00, 0xFF, 0xFF, 0xF8, 0x00,   // 44
+  0x00, 0x03, 0xE0, 0x00, 0x1F, 0xFF, 0xF8, 0x00,   // 45
+  0x00, 0x03, 0x00, 0x00, 0x07, 0xFF, 0xFC, 0x00,   // 46
+  0x00, 0x02, 0x00, 0x00, 0x01, 0xFF, 0xFC, 0x00,   // 47
+
+  // ---------- Rows 48–57 ----------
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x7F, 0xFC, 0x00,   // 48
+  0x00, 0x00, 0x00, 0x00, 0xE0, 0x1F, 0xFE, 0x00,   // 49
+  0x00, 0x00, 0x00, 0x00, 0xE0, 0x0F, 0xFE, 0x00,   // 50
+  0x00, 0x00, 0x00, 0x00, 0xE0, 0x0F, 0xFE, 0x00,   // 51
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x1F, 0xFC, 0x00,   // 52
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0xFC, 0x00,   // 53
+  0x00, 0x02, 0x00, 0x00, 0x00, 0xFF, 0xFC, 0x00,   // 54
+  0x00, 0x03, 0x00, 0x00, 0x03, 0xFF, 0xFC, 0x00,   // 55
+  0x00, 0x03, 0xE0, 0x00, 0x0F, 0xFF, 0xF8, 0x00,   // 56
+  0x00, 0x03, 0xFC, 0x00, 0x7F, 0xFF, 0xF8, 0x00,   // 57
+
+  // ---------- Rows 58–67 ----------
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xF0, 0x00,   // 58
+  0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xF0, 0x00,   // 59
+  0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xE0, 0x00,   // 60
+  0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xE0, 0x00,   // 61
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xC0, 0x00,   // 62
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x00,   // 63
+  0x00, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00,   // 64
+  0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xFC, 0x00, 0x00,   // 65
+  0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xF8, 0x00, 0x00,   // 66
+  0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xFC, 0x00, 0x00,   // 67
+
+  // ---------- Rows 68–77 ----------
+  0x00, 0x03, 0xFF, 0xE0, 0xFF, 0xFE, 0x00, 0x00,   // 68
+  0x00, 0x03, 0xFF, 0xE0, 0x7F, 0xFF, 0x00, 0x00,   // 69
+  0x00, 0x03, 0xFF, 0xE0, 0x3F, 0xFF, 0x00, 0x00,   // 70
+  0x00, 0x00, 0x3F, 0xE0, 0x1F, 0xFF, 0x80, 0x00,   // 71
+  0x00, 0x00, 0x3F, 0xE0, 0x0F, 0xFF, 0xC0, 0x00,   // 72
+  0x00, 0x00, 0x3F, 0xE0, 0x0F, 0xFF, 0xC0, 0x00,   // 73
+  0x00, 0x03, 0xFF, 0xE0, 0x07, 0xFF, 0xE0, 0x00,   // 74
+  0x00, 0x03, 0xFF, 0xE0, 0x03, 0xFF, 0xF0, 0x00,   // 75
+  0x00, 0x03, 0xFF, 0xE0, 0x03, 0xFF, 0xF0, 0x00,   // 76
+  0x00, 0x03, 0xFF, 0xE0, 0x01, 0xFF, 0xF8, 0x00,   // 77
+
+  // ---------- Rows 78–81 ----------
+  0x00, 0x03, 0xFF, 0xE0, 0x00, 0xFF, 0xFC, 0x00,   // 78
+  0x00, 0x01, 0xFF, 0xC0, 0x00, 0xFF, 0xFC, 0x00,   // 79
+  0x00, 0x00, 0xFF, 0x80, 0x00, 0x7F, 0xFE, 0x00,   // 80
+  0x00, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0xFF, 0x00,   // 81
+
+  // ---------- Rows 82–128: blank ----------
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW, BLANK_ROW,
+  BLANK_ROW, BLANK_ROW
+};
+
+// ================================================================
+// ====================== UI CONSTANTS =============================
+// ================================================================
+const int HEADER_HEIGHT = 12;
+const int LINE_HEIGHT   = 8;
+const int ITEM_GAP      = 4;
+
+// Demo tank list (hardcoded)
+const int DEMO_TANKS = 6;
+String demoTankNames[DEMO_TANKS] = {
+  "Living Room",
+  "Shrimp Nano",
+  "Discus Tank",
+  "Office Tank",
+  "Quarantine",
+  "Planted 75g"
+};
+
+int tankCount = DEMO_TANKS;
+String tankNames[DEMO_TANKS];
+
+// Demo selection state
+int scrollOffset = 0;
+int selectedIndex = 0;
+int visibleCount = 0;
+int lastVisibleIndex = 0;
+
+// Hardcoded “measurement”
+struct Reading {
+  float tempF;
+  float ph;
+  int   tds;
+};
+
+Reading lastReading; // used for smooth results -> logo transition
+
+// ================================================================
+// ====================== INTRO SCREENS ============================
+// ================================================================
+void renderIntroScreenNoDisplay() {
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(2);
+  display.setCursor(10, 0);
+  display.println("");
+  display.println("Aqua");
+  display.println(" Spec");
+
+  display.setTextSize(1);
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println("");
+  display.println(" by Rotala");
+}
+
+void renderBootLogo() {
+  display.clearDisplay();
+  display.drawBitmap(0, 0, MY_BITMAP, 64, 128, SSD1306_WHITE);
+  display.display();
+}
+
+void runBootLogoSequence() {
+  int w = display.width();   // 64
+  int h = display.height();  // 128
+
+  // 1) Show R logo
+  renderBootLogo();
+  delay(2500);
+
+  // 2) Wipe to white (your phenomenal version)
+  for (int x = w; x >= 0; x -= 2) {
+    display.clearDisplay();
+    display.drawBitmap(0, 0, MY_BITMAP, 64, 128, SSD1306_WHITE);
+    display.fillRect(x, 0, w - x, h, SSD1306_WHITE);
+    display.display();
+    delay(12);
+  }
+
+  // 3) Reveal AquaSpec intro (your phenomenal version)
+  for (int x = w; x >= 0; x -= 2) {
+    display.clearDisplay();
+    renderIntroScreenNoDisplay();
+    display.fillRect(0, 0, x, h, SSD1306_WHITE);
+    display.display();
+    delay(12);
+  }
+
+  // 4) Final intro
+  display.clearDisplay();
+  renderIntroScreenNoDisplay();
+  display.display();
+  delay(2500);
+}
+
+// ================================================================
+// ====================== TRANSITIONS (FIXED) =======================
+// Exactly like your first wipe/reveal: every frame = clear + base + mask + display
+// ================================================================
+
+// Wipe the *from* screen to white (right->left)
+void wipeToWhiteFrom(void (*fromFnNoDisplay)(), int step = 2, int frameDelay = 12) {
+  int w = display.width();
+  int h = display.height();
+  for (int x = w; x >= 0; x -= step) {
+    display.clearDisplay();
+    fromFnNoDisplay();
+    display.fillRect(x, 0, w - x, h, SSD1306_WHITE);
+    display.display();
+    delay(frameDelay);
+  }
+}
+
+// Reveal the *to* screen from white (right->left reveal, matching your intro)
+void revealFromWhiteTo(void (*toFnNoDisplay)(), int step = 2, int frameDelay = 12) {
+  int w = display.width();
+  int h = display.height();
+  for (int x = w; x >= 0; x -= step) {
+    display.clearDisplay();
+    toFnNoDisplay();
+    display.fillRect(0, 0, x, h, SSD1306_WHITE);
+    display.display();
+    delay(frameDelay);
+  }
+  display.clearDisplay();
+  toFnNoDisplay();
+  display.display();
+}
+
+// Full transition: from -> wipe -> reveal -> hold
+void transitionTo(void (*fromFnNoDisplay)(), void (*toFnNoDisplay)(), int holdMs = 700) {
+  wipeToWhiteFrom(fromFnNoDisplay);
+  revealFromWhiteTo(toFnNoDisplay);
+  delay(holdMs);
+}
+
+// ================================================================
+// ==================== LIST / MENU RENDERING ======================
+// ================================================================
+void drawHeader(const char* title) {
+  int W = display.width();
+  display.fillRect(0, 0, W, HEADER_HEIGHT, SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
+
+  int titleWidth = strlen(title) * 6;
+  int x = (W - titleWidth) / 2;
+  if (x < 0) x = 0;
+  display.setCursor(x, 2);
+  display.print(title);
+
+  display.setTextColor(SSD1306_WHITE, SSD1306_BLACK);
+}
+
+void wrapTankNameToLines(const String& name, String* outLines, int& lineCount, int maxCharsPerLine) {
+  lineCount = 0;
+  if (name.length() == 0) return;
+
+  const int MAX_WORD = 7;
+  const int BREAK_KEEP = 6;
+  const int MAX_LINES = 8;
+
+  if (name.length() <= MAX_WORD && name.length() <= maxCharsPerLine) {
+    outLines[0] = name;
+    lineCount = 1;
+    return;
+  }
+
+  String currentLine = "";
+  int currentLen = 0;
+  int pos = 0, n = name.length();
+
+  while (pos < n && lineCount < MAX_LINES) {
+    while (pos < n && name[pos] == ' ') pos++;
+    if (pos >= n) break;
+
+    int startWord = pos;
+    while (pos < n && name[pos] != ' ') pos++;
+    String word = name.substring(startWord, pos);
+
+    while (word.length() > 0 && lineCount < MAX_LINES) {
+      if (word.length() <= MAX_WORD && word.length() <= maxCharsPerLine) {
+        int extra = (currentLen == 0) ? word.length() : 1 + word.length();
+        if (currentLen + extra <= maxCharsPerLine) {
+          if (currentLen == 0) currentLine = word;
+          else currentLine += " " + word;
+          currentLen += extra;
+        } else {
+          outLines[lineCount++] = currentLine;
+          currentLine = word;
+          currentLen = word.length();
+        }
+        word = "";
+      } else {
+        int maxChunk = maxCharsPerLine - 1;
+        if (maxChunk < 1) maxChunk = 1;
+        int chunkLen = BREAK_KEEP;
+        if (chunkLen > maxChunk) chunkLen = maxChunk;
+        if (chunkLen > word.length()) chunkLen = word.length();
+
+        String chunk = word.substring(0, chunkLen);
+        bool more = (chunkLen < word.length());
+        String piece = more ? chunk + "-" : chunk;
+
+        int extra = (currentLen == 0) ? piece.length() : 1 + piece.length();
+        if (currentLen + extra <= maxCharsPerLine) {
+          if (currentLen == 0) currentLine = piece;
+          else currentLine += " " + piece;
+          currentLen += extra;
+        } else {
+          outLines[lineCount++] = currentLine;
+          currentLine = piece;
+          currentLen = piece.length();
+        }
+
+        word = more ? word.substring(chunkLen) : "";
+      }
+    }
+  }
+
+  if (currentLen > 0 && lineCount < MAX_LINES) {
+    outLines[lineCount++] = currentLine;
+  }
+}
+
+int drawTankRow(int index, int y, bool selected, int maxCharsPerLine) {
+  const int MAX_LINES = 8;
+  String lines[MAX_LINES];
+  int lineCount = 0;
+
+  wrapTankNameToLines(tankNames[index], lines, lineCount, maxCharsPerLine);
+  if (lineCount <= 0) lineCount = 1;
+
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE, SSD1306_BLACK);
+
+  display.setCursor(0, y);
+  display.print(selected ? ">" : " ");
+
+  for (int i = 0; i < lineCount; i++) {
+    int textY = y + i * LINE_HEIGHT;
+    display.setCursor(10, textY);
+    display.print(lines[i]);
+  }
+
+  return lineCount;
+}
+
+void drawScrollbar() {
+  int H = display.height();
+  int W = display.width();
+
+  if (tankCount <= 0 || visibleCount <= 0) return;
+  if (visibleCount >= tankCount) return;
+
+  int trackX = W - 4;
+  int trackY = HEADER_HEIGHT;
+  int trackH = H - HEADER_HEIGHT;
+
+  display.drawRect(trackX, trackY, 4, trackH - 1, SSD1306_WHITE);
+
+  float fracVisible = (float)visibleCount / tankCount;
+  if (fracVisible > 1.0f) fracVisible = 1.0f;
+
+  int sliderH = trackH * fracVisible;
+  if (sliderH < 4) sliderH = 4;
+  if (sliderH > trackH - 2) sliderH = trackH - 2;
+
+  int maxOffset = tankCount - visibleCount;
+  float fracPos = (maxOffset > 0) ? (float)scrollOffset / maxOffset : 0;
+
+  int sliderY = trackY + (trackH - sliderH) * fracPos;
+  display.fillRect(trackX + 1, sliderY, 2, sliderH, SSD1306_WHITE);
+}
+
+void ensureSelectedVisible() {
+  int H = display.height();
+  int W = display.width();
+
+  int startY = HEADER_HEIGHT + LINE_HEIGHT;
+  int textAreaWidth = W - 10 - 6;
+  int maxCharsPerLine = textAreaWidth / 6;
+  if (maxCharsPerLine < 3) maxCharsPerLine = 3;
+
+  if (selectedIndex < scrollOffset) {
+    scrollOffset = selectedIndex;
+    return;
+  }
+
+  while (true) {
+    int y = startY;
+    bool selectedVisible = false;
+
+    for (int i = scrollOffset; i < tankCount; i++) {
+      const int MAX_LINES = 8;
+      String tempLines[MAX_LINES];
+      int lineCount = 0;
+      wrapTankNameToLines(tankNames[i], tempLines, lineCount, maxCharsPerLine);
+      if (lineCount <= 0) lineCount = 1;
+
+      int itemHeight = lineCount * LINE_HEIGHT + ITEM_GAP;
+      if (y + itemHeight > H) break;
+
+      if (i == selectedIndex) { selectedVisible = true; break; }
+      y += itemHeight;
+    }
+
+    if (selectedVisible) break;
+    if (scrollOffset >= selectedIndex) { scrollOffset = selectedIndex; break; }
+    scrollOffset++;
+  }
+}
+
+// NoDisplay version (for transitions)
+void renderTankListScreenNoDisplay() {
+  display.clearDisplay();
+  drawHeader("TANKS");
+
+  int H = display.height();
+  int W = display.width();
+
+  int startY = HEADER_HEIGHT + LINE_HEIGHT;
+  int textAreaWidth = W - 10 - 6;
+  int maxCharsPerLine = textAreaWidth / 6;
+  if (maxCharsPerLine < 3) maxCharsPerLine = 3;
+
+  int y = startY;
+  visibleCount = 0;
+  lastVisibleIndex = scrollOffset;
+
+  for (int i = scrollOffset; i < tankCount; i++) {
+    const int MAX_LINES = 8;
+    String tempLines[MAX_LINES];
+    int lineCount = 0;
+    wrapTankNameToLines(tankNames[i], tempLines, lineCount, maxCharsPerLine);
+    if (lineCount <= 0) lineCount = 1;
+
+    int itemHeight = lineCount * LINE_HEIGHT + ITEM_GAP;
+    if (y + itemHeight > H) break;
+
+    drawTankRow(i, y, (i == selectedIndex), maxCharsPerLine);
+    y += itemHeight;
+    visibleCount++;
+    lastVisibleIndex = i;
+  }
+
+  drawScrollbar();
+}
+
+void renderTankListScreen() {
+  renderTankListScreenNoDisplay();
+  display.display();
+}
+
+int drawTankTitleHeaderBlock(int tankIndex) {
+  display.clearDisplay();
+  display.setTextSize(1);
+
+  int W = display.width();
+  int textAreaWidth = W - 4;
+  int maxChars = textAreaWidth / 6;
+  if (maxChars < 3) maxChars = 3;
+
+  const int MAX_LINES = 8;
+  String lines[MAX_LINES];
+  int lineCount = 0;
+  wrapTankNameToLines(tankNames[tankIndex], lines, lineCount, maxChars);
+  if (lineCount <= 0) lineCount = 1;
+
+  int headerH = lineCount * LINE_HEIGHT + 2;
+
+  display.fillRect(0, 0, W, headerH, SSD1306_WHITE);
+  display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
+
+  int y = 0;
+  for (int i = 0; i < lineCount; i++) {
+    String upper = lines[i];
+    upper.toUpperCase();
+    int px = upper.length() * 6;
+    int x = (W - px) / 2; if (x < 0) x = 0;
+    display.setCursor(x, y);
+    display.print(upper);
+    y += LINE_HEIGHT;
+  }
+
+  display.setTextColor(SSD1306_WHITE, SSD1306_BLACK);
+  return headerH;
+}
+
+void drawTankMenuScreen(int tankIndex, int menuSel) {
+  int headerH = drawTankTitleHeaderBlock(tankIndex);
+  int y = headerH + 2 * LINE_HEIGHT;
+
+  display.setCursor(0, y);
+  display.print(menuSel == 0 ? ">" : " ");
+  display.setCursor(10, y);
+  display.print("Measure");
+
+  y += 2 * LINE_HEIGHT;
+
+  display.setCursor(0, y);
+  display.print(menuSel == 1 ? ">" : " ");
+  display.setCursor(10, y);
+  display.print("Back");
+
+  display.display();
+}
+
+void drawMeasuringScreen(int tankIndex, int progress) {
+  int headerH = drawTankTitleHeaderBlock(tankIndex);
+
+  display.setCursor(0, headerH + 2 * LINE_HEIGHT);
+  display.print("Measuring");
+
+  int W = display.width();
+  int barMargin = 10;
+  int barW = W - barMargin * 2;
+  if (barW < 10) barW = 10;
+  int barH = 6;
+  int barY = headerH + 4 * LINE_HEIGHT;
+
+  display.drawRect(barMargin, barY, barW, barH, SSD1306_WHITE);
+
+  if (progress < 0) progress = 0;
+  if (progress > 100) progress = 100;
+  int fillW = (barW - 2) * progress / 100;
+  if (fillW > 0) {
+    display.fillRect(barMargin + 1, barY + 1, fillW, barH - 2, SSD1306_WHITE);
+  }
+
+  display.display();
+}
+
+void drawMeasurementResultsScreen(int tankIndex, const Reading& r) {
+  int headerH = drawTankTitleHeaderBlock(tankIndex);
+
+  int y = headerH + 2 * LINE_HEIGHT;
+  display.setCursor(0, y); display.print("pH: ");   display.println(r.ph, 2);
+
+  y += LINE_HEIGHT;
+  display.setCursor(0, y); display.print("TDS: ");  display.println(r.tds);
+
+  y += LINE_HEIGHT;
+  display.setCursor(0, y); display.print("Temp: "); display.print(r.tempF, 1); display.println(" F");
+
+  display.display();
+}
+
+// ================================================================
+// ====================== NoDisplay Renderers ======================
+// These are what transitions call. NO display.display() inside.
+// ================================================================
+void renderIntroNoDisplay() {
+  renderIntroScreenNoDisplay();
+}
+
+void renderTankListNoDisplay() {
+  renderTankListScreenNoDisplay();
+}
+
+void renderLogoNoDisplay() {
+  display.drawBitmap(0, 0, MY_BITMAP, 64, 128, SSD1306_WHITE);
+}
+
+void renderResultsNoDisplay() {
+  int headerH = drawTankTitleHeaderBlock(selectedIndex);
+
+  int y = headerH + 2 * LINE_HEIGHT;
+  display.setCursor(0, y); display.print("pH: ");   display.println(lastReading.ph, 2);
+
+  y += LINE_HEIGHT;
+  display.setCursor(0, y); display.print("TDS: ");  display.println(lastReading.tds);
+
+  y += LINE_HEIGHT;
+  display.setCursor(0, y); display.print("Temp: "); display.print(lastReading.tempF, 1); display.println(" F");
+}
+
+// ================================================================
+// ====================== DEMO SEQUENCE ============================
+// ================================================================
+void demoSequenceOnce() {
+  // 1) Exact logo -> wipe -> AquaSpec intro (your original great one)
+  runBootLogoSequence();
+  delay(900);
+
+  // 2) AquaSpec intro -> Tank list (NO FLASH, uses the exact same style as boot transition)
+  transitionTo(renderIntroNoDisplay, renderTankListNoDisplay, 600);
+
+  // “User scrolls down”
+  for (int i = 0; i < DEMO_TANKS; i++) {
+    selectedIndex = i;
+    ensureSelectedVisible();
+    renderTankListScreen();
+    delay(450);
+  }
+
+  delay(450);
+
+  // Menu screen appears, with Measure selected
+  drawTankMenuScreen(selectedIndex, 0);
+  delay(900);
+
+  // “User presses Measure”
+  for (int p = 0; p <= 100; p += 10) {
+    drawMeasuringScreen(selectedIndex, p);
+    delay(120);
+  }
+
+  // Hardcoded results (store into lastReading for smooth transition)
+  lastReading.ph = 6.78f;
+  lastReading.tds = 214;
+  lastReading.tempF = 73.6f;
+
+  drawMeasurementResultsScreen(selectedIndex, lastReading);
+  delay(2500);
+
+  // 3) Results -> Logo (NO FLASH, exact same style)
+  transitionTo(renderResultsNoDisplay, renderLogoNoDisplay, 1200);
+}
+
+// ================================================================
+// ============================ SETUP/LOOP ==========================
+// ================================================================
+void setup() {
+  Serial.begin(115200);
+
+  SPI.begin(OLED_CLK, -1, OLED_MOSI, OLED_CS);
+  if (!display.begin(SSD1306_SWITCHCAPVCC)) {
+    Serial.println("SSD1306 allocation failed");
+    while (true) {}
+  }
+
+  display.setRotation(3); // portrait (64x128)
+  display.clearDisplay();
+  display.display();
+
+  // Copy demo tank names into tankNames[] used by render functions
+  for (int i = 0; i < DEMO_TANKS; i++) tankNames[i] = demoTankNames[i];
+}
+
+void loop() {
+  demoSequenceOnce();
+  delay(800);
+}
